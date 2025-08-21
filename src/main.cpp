@@ -1,19 +1,17 @@
 #include <Arduino.h>
-
 #include <LiquidCrystal.h>
 
-String deck[52];
-int deckSize = 52;
+// creating a array of 52 unsigned 8-bit integers.
+uint8_t deck[52]; 
 
-String starting1, starting2;
+int deckSize = 0;
 
-String dealer1, dealer2;
 
-String playerCards[12];
-String dealerCards[12];
+int playerCards[12];
+int dealerCards[12];
 
-int playerCardCount;
-int dealerCardCount;
+int playerCardCount = 0;
+int dealerCardCount = 0;
 
 int playerTotal = 0; 
 int dealerTotal = 0;        
@@ -21,6 +19,15 @@ int dealerTotal = 0;
 
 bool gameOver = false;
 
+// Card rank and suit labels
+const char *rankLabels[] = {"A","2","3","4","5","6","7","8","9","10","J","Q","K"};
+const char *suitLabels[] = {"hearts","spades","clubs","diamonds"};
+
+//Helper functions to get card rank and suit from ID
+inline int id_rank(int id) { return id % 13; }   // 0..12
+inline int id_suit(int id) { return id / 13; }   // 0..3
+
+// LCD setup
 const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
@@ -74,90 +81,62 @@ byte club[8] = {
 };
 
 
-// Initializing the deck
+
+// Initializing the playing deck and shuffles it
 void initializeDeck() {
-  String suits[] = {"hearts", "spades", "clubs", "diamonds"};
-  int index = 0;
-  for (int i = 1; i < 14; i++) {
-    for (int j = 0; j < 4; j++) {
-      if (i == 1) {
-        deck[index] = "A of " + suits[j];
-      } else if (i == 11) {
-        deck[index] = "J of " + suits[j];
-      } else if (i == 12) {
-        deck[index] = "Q of " + suits[j];
-      } else if (i == 13) {
-        deck[index] = "K of " + suits[j];
-      } else {
-        deck[index] = String(i) + " of " + suits[j];
-      }
-      index++;
-    }
+
+  for (int i = 0; i < 52; i++) {
+    deck[i] = i;
   }
+
+  deckSize = 52;
+
+
+  // Fisher-Yates shuffle
+  for (int i = deckSize - 1; i > 0; --i) {
+    int j = random(i + 1);
+    uint8_t tmp = deck[i];
+    deck[i] = deck[j];
+    deck[j] = tmp;
+  }
+
+  
 }
 
 
 
-// 1 deck game so draw cards until deck empty
-String drawCard() {
-  if (deckSize == 0) {
-    return "No cards left!";
+// Draws a card from the deck and removes it from the deck
+// Returns -1 if no cards left
+int drawCard() {
+
+  if (deckSize <= 0) {
+    return -1;;
   }
 
-  int randomIndex = random(deckSize);
-  String card = deck[randomIndex];
-
-  Serial.print("Drew card: ");
-  Serial.println(card);
-
-  if(card == ""){
-    Serial.print("EMPTY: ");
-  
-  }
-
-  for (int i = randomIndex; i < deckSize - 1; i++) {
-    
-    // testing for uninitialized slots
-    if (deck[i] == "") {
-      Serial.print("Uninitialized slot at: ");
-      Serial.println(i);
-    }
-    
-    deck[i] = deck[i + 1];
-  }
-
-  deck[deckSize - 1] = "";
   deckSize--;
-  Serial.print("Deck size now: ");
-  Serial.println(deckSize);
-  return card;
+  int id = deck[deckSize];
+  deck[deckSize] = 0xFF;
+
+
+  return id;
 }
 
 
 
-// obtaining the cards value 
-int getCardValue(String card) {
-  
-  card.toLowerCase();
-  int spaceIndex = card.indexOf(" ");
-  String rank = card.substring(0, spaceIndex);
+// Obtains the cards value 
+int getCardValue(int id) {
 
-  Serial.print("Parsing card: ");
-  Serial.println(card);
-
-  if (rank == "a") {
-    return 11;
-  } else if (rank == "k" || rank == "q" || rank == "j") {
-    return 10;
-  } else {
-    return rank.toInt();
-  }
+  if (id < 0 || id >= 52) return 0;
+  int r = id_rank(id);
+  if (r == 0) return 11;        // Ace
+  if (r >= 10) return 10;       // J Q K
+  return r + 1; 
 }
 
 
 
-// Helper to get best hand value (Ace as 11 or 1)
-int getBestHandValue(String cards[], int count) {
+// Returns the highest valid Blackjack hand value (Ace counts as 11 or 1).
+int getBestHandValue(int cards[], int count) {
  
   int total = 0;
   int aceCount = 0;
@@ -190,22 +169,15 @@ void startingHand() {
 
   playerCardCount = 0;
 
-  starting1 = drawCard();
-  starting2 = drawCard();
+  int c1 = drawCard();
+  int c2 = drawCard();
 
-  playerCards[playerCardCount++] = starting1;
-  playerCards[playerCardCount++] = starting2;
+  if (c1 >= 0) playerCards[playerCardCount++] = c1;
+  if (c2 >= 0) playerCards[playerCardCount++] = c2;
 
-  playerTotal = getBestHandValue(playerCards, playerCardCount); 
+  playerTotal = getBestHandValue(playerCards, playerCardCount);
 
-  Serial.print("Player cards: ");
-  for (int i = 0; i < playerCardCount; i++) {
-    Serial.print(playerCards[i]);
-    Serial.print(", ");
-  }
-  Serial.println();
   
-
 }
 
 
@@ -215,20 +187,15 @@ void dealerHand() {
   
   dealerCardCount = 0;
 
-  dealer1 = drawCard();
-  dealer2 = drawCard();
+  int d1 = drawCard();
+  int d2 = drawCard();
 
-  dealerCards[dealerCardCount++] = dealer1;
-  dealerCards[dealerCardCount++] = dealer2;
+  if (d1 >= 0) dealerCards[dealerCardCount++] = d1;
+  if (d2 >= 0) dealerCards[dealerCardCount++] = d2;
 
   dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
+
   
-  Serial.print("Dealer cards: ");
-  for (int i = 0; i < dealerCardCount; i++) {
-    Serial.print(dealerCards[i]);
-    Serial.print(", ");
-  }
-  Serial.println();
 }
 
 
@@ -254,94 +221,130 @@ void resetGame() {
 
   lcd.clear();
   lcd.print("New Round!");
-  delay(900);
+  delay(1200);
+  
+  
+}
 
+
+
+// Checks for Blackjack immediately after the initial deal.
+// - Calculates player and dealer totals to see if either has a natural 21.
+// - Applies standard casino "peek" rule: if dealer shows Ace or 10, they check for Blackjack.
+// - Displays the outcome (player win, dealer win, or push) on the LCD.
+// - Ends the round early if a Blackjack is found, otherwise play continues.
+void checkBlackJack(){
+  
   playerTotal = getBestHandValue(playerCards, playerCardCount);
   dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
 
-  
+  bool playerBJ = (playerTotal == 21 && playerCardCount == 2);
+  bool dealerBJ = (dealerTotal == 21 && dealerCardCount == 2);
+
+  int dealerUpcard = dealerCards[0];
+  int dealerUpVal = getCardValue(dealerUpcard);
+
+  if (playerBJ) {
+
+    if (dealerUpVal == 11 || dealerUpVal == 10) {  
+
+      // Dealer peeks
+      if (dealerBJ) {
+        lcd.clear();
+        lcd.setCursor(0, 0); lcd.print("BLACKJACK!");
+        lcd.setCursor(0, 1); lcd.print("It's a Push!");
+      } 
+      else {
+        lcd.clear();
+        lcd.setCursor(0, 0); lcd.print("BLACKJACK!");
+        lcd.setCursor(0, 1); lcd.print("You Win!");
+      }
+    } 
+    else {
+      // Dealer doesn’t peek, player wins immediately
+      lcd.clear();
+      lcd.setCursor(0, 0); lcd.print("BLACKJACK!");
+      lcd.setCursor(0, 1); lcd.print("You Win!");
+    }
+
+    delay(3000);
+    gameOver = true;
+    resetGame();
+    
+  }
+
+  // If dealer has blackjack and player does not
+  if (dealerBJ) {
+
+    lcd.clear();
+    lcd.setCursor(0, 0); lcd.print("BLACKJACK!");
+    lcd.setCursor(0, 1); lcd.print("Dealer Wins!");
+    delay(3000);
+    gameOver = true;
+    resetGame();
+    
+  }
+
 }
 
 
 
-// determines if player or dealer has blackjack already
-
-void checkBlackJack(){
-  
-  if (playerTotal == 21 && playerCardCount == 2) {
-    lcd.clear();
-    lcd.print("BLACKJACK! You win!");
-    delay(2000);
-    gameOver = true;
-    resetGame();
-    return;
-  }
-
-  if(dealerTotal == 21 && dealerCardCount == 2){
-    lcd.clear();
-    lcd.print("BLACKJACK! Dealer win!");
-    delay(2000);
-    gameOver = true;
-    resetGame();
-    return;
-  }
-
-}
-
-
-
-// determines whether player bust
+// determines whether player total is a bust or not
 void isBust(int total) {
 
   if (total > 21) {
     lcd.clear();
     lcd.print("You Busted!");
     delay(900);
+    gameOver = true;
     resetGame();
     checkBlackJack();
+    return; 
   }
 
 }
 
 
 
-//displays the cards onto the lcd
-void displayCard(String card) {
+// displays the cards onto the lcd
+void displayCard(int id) {
 
-  card.toLowerCase();
-  int spaceIndex = card.indexOf(" ");
-  String rank = card.substring(0, spaceIndex);
+  if (id < 0 || id >= 52) {
+    lcd.print("??");
+    return;
+  }
+  int r = id_rank(id);
+  int s = id_suit(id);
 
-  Serial.print("Displaying card: ");
-  Serial.println(card);
+  // print rank
+  lcd.print(rankLabels[r]);
 
-  if (rank == "a") lcd.print("A");
-  else if (rank == "j") lcd.print("J");
-  else if (rank == "q") lcd.print("Q");
-  else if (rank == "k") lcd.print("K");
-  else lcd.print(rank);
-
-  if (card.indexOf("hearts") != -1) lcd.write(byte(0));
-  else if (card.indexOf("diamonds") != -1) lcd.write(byte(1));
-  else if (card.indexOf("spades") != -1) lcd.write(byte(2));
-  else if (card.indexOf("clubs") != -1) lcd.write(byte(3));
+  if (s == 0) lcd.write(byte(0)); // hearts
+  else if (s == 1) lcd.write(byte(2)); // spades -> glyph index 2
+  else if (s == 2) lcd.write(byte(3)); // clubs  -> glyph 3
+  else if (s == 3) lcd.write(byte(1)); // diamonds -> glyph 1
 }
 
 
 
-void displayHand(String cards[], int count, int row) {
+// displays the player's or dealer's hand on a single line
+void displayHand(int cards[], int count, int row) {
 
   lcd.setCursor(0, row);
   for (int i = 0; i < count; i++) {
     displayCard(cards[i]);
-    lcd.print(" ");
+    if (i < count - 1) lcd.print(" ");
   }
 }
 
 
 
-// determines whether the winner of the round or tie
+// determines if there is a player win, dealer win, bust, or push
 void determineWinner() {
+  
+  playerTotal = getBestHandValue(playerCards, playerCardCount);
+  dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
+
   lcd.clear();
   
   if (playerTotal > 21) {
@@ -361,42 +364,35 @@ void determineWinner() {
   }
 
   delay(3000);
+  gameOver = true;
   resetGame();
-  checkBlackJack();
 }
 
 
 
-// Once player stands, dealer will delt its cards
+// Once player stands, dealer will show their 2nd card and draw cards until they reach 17, above 17 or bust
 void dealerTurn() {
+
+  lcd.clear();
+  lcd.print("Dealer Shows:");
+  displayHand(dealerCards, dealerCardCount, 1);
+  delay(2000);
+
+  dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
 
   while (dealerTotal < 17) {
 
-    String newCard = drawCard();
-    dealerCards[dealerCardCount++] = newCard;
-    dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
+    int newCard = drawCard();
 
-    // debugging print
-    Serial.print("Dealer cards: ");
-    for (int i = 0; i < dealerCardCount; i++) {
-      Serial.print(dealerCards[i]);
-      Serial.print(", ");
-    }
-    Serial.println();
+    if (newCard >= 0 && dealerCardCount < 12) {
+      dealerCards[dealerCardCount++] = newCard;
+      dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
+    } 
 
     lcd.clear();
     lcd.print("Dealer draws:");
-    delay(1000);
-
-    //lcd.setCursor(0, 1);
-    //displayHand(dealerCards, dealerCardCount);
-    //displayCard(newCard);
-
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Dealer card:");
     displayHand(dealerCards, dealerCardCount, 1);
-    delay(1500);
+    delay(1300);
 
 
     if (dealerTotal > 21) {
@@ -412,7 +408,9 @@ void dealerTurn() {
 
 
 
-// ask the player if they want to hit or stand
+// Handles player input for Hit or Stand. Determines whether hit or stand button is pressed.
+// - Hit: draw a card, update player's hand, check for bust.
+// - Stand: end player turn and let dealer play.
 void hitStand() {
 
   if(gameOver){
@@ -422,39 +420,30 @@ void hitStand() {
   while (true) {
     lcd.clear();
     lcd.print("Hit or Stand?");
-    delay(1500);
+    delay(250);
 
     int hitButtonState = digitalRead(hitButtonPin);
     int standButtonState = digitalRead(standButtonPin);
 
     if (hitButtonState == LOW) {
 
-      String newCard = drawCard();
-      playerCards[playerCardCount++] = newCard;
-      playerTotal = getBestHandValue(playerCards, playerCardCount);
+      int newCard = drawCard();
 
-     // debugging print
-      Serial.print("Player cards: ");
-      for (int i = 0; i < playerCardCount; i++) {
-        Serial.print(playerCards[i]);
-        Serial.print(", ");
-      }
-      Serial.println();
+      if (newCard >= 0 && playerCardCount < 12) {
+        playerCards[playerCardCount++] = newCard;
+        playerTotal = getBestHandValue(playerCards, playerCardCount);
+      } 
+      
 
       lcd.clear();
       lcd.print("You chose: HIT");
       delay(1000);
-      //lcd.setCursor(0, 1);
+      
 
       lcd.clear();
-      lcd.setCursor(0, 0);
       lcd.print("Player card:");
       displayHand(playerCards, playerCardCount, 1);
-      delay(1500);
-
-      //displayHand(playerCards, playerCardCount);
-      //displayCard(newCard);
-      //delay(1500);
+      delay(2000);
 
 
       isBust(playerTotal);
@@ -465,15 +454,13 @@ void hitStand() {
       lcd.print("You chose: STAND");
       delay(1500);
 
-      // see how this functions works
       lcd.clear();
-      lcd.setCursor(0, 0);
       lcd.print("Dealer card:");
       displayHand(dealerCards, dealerCardCount, 1);
       delay(1200);
 
       dealerTurn();
-      break;
+      return;
 
     }
   }
@@ -481,6 +468,45 @@ void hitStand() {
 
 
 
+// Starts new round by dealing cards to both player and dealer. 
+//  1. Displays the player's hand and the dealer's first card.
+//  2. Checks for immediate Blackjack after dealing.
+//  3. If no Blackjack, allows player to hit or stand.
+void playRound() {
+
+  lcd.clear();
+  lcd.print("Dealing cards...");
+  delay(1000);
+
+
+  // Show player's starting hand
+  lcd.clear();
+  lcd.print("Player:");
+  displayHand(playerCards, playerCardCount, 1);
+  delay(2000);
+
+  // Show dealer's first card only
+  lcd.clear();
+  lcd.print("Dealer:");
+  lcd.setCursor(0,1);
+  displayCard(dealerCards[0]);
+  lcd.print(" ?");
+  delay(2000);
+
+  // Check for blackjack immediately after dealing
+  checkBlackJack();
+  if (gameOver){
+    return;
+  }
+
+  // let player play
+  hitStand();
+
+}
+
+
+
+// Initalizes the LCD, buttons, and starts the game
 void setup() {
 
   Serial.begin(9600);
@@ -500,67 +526,18 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print(" Blackjack ");
   delay(1500);
-  lcd.clear();
-  lcd.print("Dealing cards...");
-  delay(1500);
-
-  initializeDeck();
-  startingHand();
-  dealerHand();
-
-  playerTotal = getBestHandValue(playerCards, playerCardCount);
-  dealerTotal = getBestHandValue(dealerCards, dealerCardCount);
-
-  checkBlackJack(); // <-- Only call here, after both hands are dealt
+  
+  resetGame();
+  checkBlackJack();
 
   
 }
 
 
 
+// Calls the playRound function repeatedly to start the game
 void loop() {
 
-  /*
-  lcd.clear();
-  lcd.print("Your cards:");
-  lcd.setCursor(0, 1);
-  displayCard(starting1);
-  lcd.setCursor(8, 1);
-  displayCard(starting2);
-  delay(3000);
-  
+  playRound();
 
-  hitStand();
-  
-  lcd.clear();
-  lcd.print("Dealer:");
-  lcd.setCursor(9, 0);
-  displayCard(dealer1);
-  delay(3000);
-  
-  */
-
- 
-  // 1. Show Player's 2 cards
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Player card:");
-  displayHand(playerCards, playerCardCount, 1);
-  delay(2000);
-
-  // 2. Show Dealer's 1st card
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Dealer card:");
-  lcd.setCursor(0, 1);
-  displayCard(dealerCards[0]);
-  lcd.print(" ?");
-  delay(1500);
-
-  // 3. Player's turn
-  hitStand();
-
-  
-
-  
 }
